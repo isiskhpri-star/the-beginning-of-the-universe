@@ -32,3 +32,6 @@ google-services.json
 
 # Android Profiling
 *.hprof
+
+# git-crypt symmetric key (NEVER commit this)
+git-crypt-key
