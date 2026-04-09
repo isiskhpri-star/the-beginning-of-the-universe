@@ -106,18 +106,7 @@ verify() {
 }
 
 # Main
-check_prerequisites
-
 case "${1:-}" in
-    --unlock)
-        unlock_repo
-        ;;
-    --export-key)
-        export_key "${2:-git-crypt-key}"
-        ;;
-    --verify)
-        verify
-        ;;
     --help|-h)
         echo "Usage: $0 [OPTIONS] [GPG_KEY_ID]"
         echo ""
@@ -129,7 +118,20 @@ case "${1:-}" in
         echo "  --verify        Show encryption status of files"
         echo "  --help          Show this help message"
         ;;
+    --unlock)
+        check_prerequisites
+        unlock_repo
+        ;;
+    --export-key)
+        check_prerequisites
+        export_key "${2:-git-crypt-key}"
+        ;;
+    --verify)
+        check_prerequisites
+        verify
+        ;;
     *)
+        check_prerequisites
         init_git_crypt
         add_gpg_user "${1:-}"
         verify
