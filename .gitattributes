@@ -1,0 +1,21 @@
+# git-crypt encryption rules
+# Files matching these patterns are transparently encrypted at rest on GitHub
+# and decrypted locally for authorized users.
+
+# Encrypt everything in the blueprints/ directory
+blueprints/**  filter=git-crypt diff=git-crypt
+
+# Encrypt everything in the chest/ directory
+chest/**  filter=git-crypt diff=git-crypt
+
+# Encrypt any standalone secret files
+*.secret  filter=git-crypt diff=git-crypt
+*.key     filter=git-crypt diff=git-crypt
+*.pem     filter=git-crypt diff=git-crypt
+
+# Keep .gitkeep files unencrypted so directories are always visible
+blueprints/.gitkeep  !filter !diff
+chest/.gitkeep       !filter !diff
+
+# Keep .gitattributes unencrypted (required for git-crypt to work)
+.gitattributes  !filter !diff
