@@ -67,103 +67,110 @@ class InstrumentedTransactionGuard(
         // Start root trace span
         val spanContext = tracer.startEvaluation(transaction, account)
 
-        // Emit evaluation-started log
-        logSink(logEnricher.evaluationStarted(transaction))
+        try {
+            // Emit evaluation-started log
+            logSink(logEnricher.evaluationStarted(transaction))
 
-        // Emit evaluation counter metric
-        metrics.recordEvaluation(
-            accountId = transaction.accountId,
-            userId = transaction.initiatorUserId,
-            currency = transaction.currency
-        )
-
-        // Record transaction amount distribution
-        metrics.recordTransactionAmount(transaction.amount, transaction.currency)
-
-        val allChecks = mutableListOf<SafetyCheck>()
-
-        // Phase 1: Structural validation
-        val validationChecks = tracer.traceValidation(spanContext) {
-            validator.validate(transaction)
-        }
-        allChecks += validationChecks
-        emitCheckMetrics(validationChecks, transaction)
-
-        // Phase 2: Account authorization
-        val authChecks = tracer.traceAuthorization(spanContext) {
-            authorization.authorize(transaction, account)
-        }
-        allChecks += authChecks
-        emitCheckMetrics(authChecks, transaction)
-
-        // Phase 3: Rate limiting
-        val rateChecks = tracer.traceRateLimiting(spanContext) {
-            rateLimiter.check(transaction, account)
-        }
-        allChecks += rateChecks
-        emitCheckMetrics(rateChecks, transaction)
-
-        // Phase 4: Suspicious activity detection
-        val suspiciousCheck = tracer.traceSuspiciousActivity(spanContext) {
-            checkSuspiciousActivity(transaction.accountId)
-        }
-        allChecks += suspiciousCheck
-        if (!suspiciousCheck.passed) {
-            val recentDenials = auditLogger.countRecentDenials(transaction.accountId)
-            metrics.gaugeSuspiciousActivityDenials(
-                accountId = transaction.accountId,
-                denialCount = recentDenials,
-                threshold = suspiciousActivityThreshold
-            )
-            logSink(
-                logEnricher.suspiciousActivityDetected(
-                    accountId = transaction.accountId,
-                    recentDenials = recentDenials,
-                    threshold = suspiciousActivityThreshold
-                )
-            )
-        }
-
-        // Build result
-        val failures = allChecks.filter { !it.passed }
-        val denialReasons = failures.map { "${it.name}: ${it.message}" }
-        val durationMs = System.currentTimeMillis() - startTimeMs
-
-        val result = if (failures.isEmpty()) {
-            AuthorizationResult.approved(transaction.transactionId, allChecks)
-        } else {
-            AuthorizationResult.denied(transaction.transactionId, allChecks, denialReasons)
-        }
-
-        // Always audit
-        auditLogger.log(transaction, result)
-
-        // Record in rate limiter only if authorized
-        if (result.authorized) {
-            rateLimiter.recordTransaction(transaction)
-            metrics.recordAuthorized(
+            // Emit evaluation counter metric
+            metrics.recordEvaluation(
                 accountId = transaction.accountId,
                 userId = transaction.initiatorUserId,
                 currency = transaction.currency
             )
-        } else {
-            metrics.recordDenied(
-                accountId = transaction.accountId,
-                userId = transaction.initiatorUserId,
-                failedChecks = failures.map { it.name }
-            )
+
+            // Record transaction amount distribution
+            metrics.recordTransactionAmount(transaction.amount, transaction.currency)
+
+            val allChecks = mutableListOf<SafetyCheck>()
+
+            // Phase 1: Structural validation
+            val validationChecks = tracer.traceValidation(spanContext) {
+                validator.validate(transaction)
+            }
+            allChecks += validationChecks
+            emitCheckMetrics(validationChecks, transaction)
+
+            // Phase 2: Account authorization
+            val authChecks = tracer.traceAuthorization(spanContext) {
+                authorization.authorize(transaction, account)
+            }
+            allChecks += authChecks
+            emitCheckMetrics(authChecks, transaction)
+
+            // Phase 3: Rate limiting
+            val rateChecks = tracer.traceRateLimiting(spanContext) {
+                rateLimiter.check(transaction, account)
+            }
+            allChecks += rateChecks
+            emitCheckMetrics(rateChecks, transaction)
+
+            // Phase 4: Suspicious activity detection
+            val suspiciousCheck = tracer.traceSuspiciousActivity(spanContext) {
+                checkSuspiciousActivity(transaction.accountId)
+            }
+            allChecks += suspiciousCheck
+            if (!suspiciousCheck.passed) {
+                val recentDenials = auditLogger.countRecentDenials(transaction.accountId)
+                metrics.gaugeSuspiciousActivityDenials(
+                    accountId = transaction.accountId,
+                    denialCount = recentDenials,
+                    threshold = suspiciousActivityThreshold
+                )
+                logSink(
+                    logEnricher.suspiciousActivityDetected(
+                        accountId = transaction.accountId,
+                        recentDenials = recentDenials,
+                        threshold = suspiciousActivityThreshold
+                    )
+                )
+            }
+
+            // Build result
+            val failures = allChecks.filter { !it.passed }
+            val denialReasons = failures.map { "${it.name}: ${it.message}" }
+            val durationMs = System.currentTimeMillis() - startTimeMs
+
+            val result = if (failures.isEmpty()) {
+                AuthorizationResult.approved(transaction.transactionId, allChecks)
+            } else {
+                AuthorizationResult.denied(transaction.transactionId, allChecks, denialReasons)
+            }
+
+            // Always audit
+            auditLogger.log(transaction, result)
+
+            // Record in rate limiter only if authorized
+            if (result.authorized) {
+                rateLimiter.recordTransaction(transaction)
+                metrics.recordAuthorized(
+                    accountId = transaction.accountId,
+                    userId = transaction.initiatorUserId,
+                    currency = transaction.currency
+                )
+            } else {
+                metrics.recordDenied(
+                    accountId = transaction.accountId,
+                    userId = transaction.initiatorUserId,
+                    failedChecks = failures.map { it.name }
+                )
+            }
+
+            // Emit duration histogram
+            metrics.recordEvaluationDuration(durationMs, result.authorized)
+
+            // Emit evaluation-completed log
+            logSink(logEnricher.evaluationCompleted(transaction, result, durationMs))
+
+            // Finish root trace span
+            tracer.finishEvaluation(spanContext, result)
+
+            return result
+        } catch (e: Exception) {
+            spanContext.rootSpan.setError(true)
+            spanContext.rootSpan.setTag("error.message", e.message ?: "unknown")
+            spanContext.rootSpan.finish()
+            throw e
         }
-
-        // Emit duration histogram
-        metrics.recordEvaluationDuration(durationMs, result.authorized)
-
-        // Emit evaluation-completed log
-        logSink(logEnricher.evaluationCompleted(transaction, result, durationMs))
-
-        // Finish root trace span
-        tracer.finishEvaluation(spanContext, result)
-
-        return result
     }
 
     /**
