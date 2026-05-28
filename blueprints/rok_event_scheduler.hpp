@@ -467,6 +467,7 @@ public:
 
             if (event.state == EventState::SCHEDULED &&
                 event.is_in_prep_window()) {
+                event.state = EventState::PREPARATION;
                 emit_notification(event, NotificationType::PREP_REMINDER);
             }
         }

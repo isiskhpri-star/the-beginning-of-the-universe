@@ -49,7 +49,7 @@ data class Commander(
             CommanderRarity.ELITE -> mapOf(1 to 0, 2 to 3, 3 to 6, 4 to 9, 5 to 12, 6 to 15)
             CommanderRarity.ADVANCED -> mapOf(1 to 0, 2 to 2, 3 to 4, 4 to 6, 5 to 8, 6 to 10)
         }
-        return (starLevel..6).sumOf { perStarCost[it] ?: 0 } - sculptures
+        return ((starLevel + 1)..6).sumOf { perStarCost[it] ?: 0 } - sculptures
     }
 
     fun canPairWith(secondary: Commander): Boolean =
