@@ -7,7 +7,7 @@
 #   ./scripts/launch-vscode.sh                  # blank untitled file
 #   echo 'print("hi")' | ./scripts/launch-vscode.sh   # pre-filled content from stdin
 
-set -euo pipefail
+set -eu
 
 if ! command -v code &>/dev/null; then
     echo "Error: 'code' command not found."
@@ -24,4 +24,3 @@ else
     printf '' | code --new-window -
 fi
 
-echo "VS Code launched — start writing code."
