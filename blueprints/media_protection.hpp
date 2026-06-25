@@ -363,6 +363,7 @@ struct CopyPreventionPolicy {
     bool block_right_click;            // prevent right-click save
     bool block_drag_drop;              // prevent drag to save
     bool block_developer_tools;        // detect and block dev tools inspection
+    bool block_network_sniff;          // block detected network stream captures
     bool block_cache_extraction;       // clear media from cache immediately after display
     bool serve_degraded_on_suspect;    // serve low-res if suspicious activity detected
     bool require_view_token;           // require valid token for every view
@@ -372,6 +373,7 @@ struct CopyPreventionPolicy {
         : block_right_click(true)
         , block_drag_drop(true)
         , block_developer_tools(true)
+        , block_network_sniff(true)
         , block_cache_extraction(true)
         , serve_degraded_on_suspect(true)
         , require_view_token(true)
@@ -721,7 +723,8 @@ public:
 
     ProtectionResult check_screen_safety(
         const ScreenEnvironment& env,
-        const std::vector<std::string>& running_processes
+        const std::vector<std::string>& running_processes,
+        uint8_t detected_faces = 0
     ) {
         if (!active_) {
             return ProtectionResult(ProtectionVerdict::ALLOWED, "Protection inactive");
@@ -789,6 +792,24 @@ public:
             }
         }
 
+        // Room-aware protection (face detection)
+        if (room_protection_.enabled && room_protection_.use_camera_detection) {
+            if (detected_faces > room_protection_.max_faces_allowed) {
+                if (room_protection_.hide_media_on_trigger) {
+                    log_event("", "Blocked: room-aware protection triggered",
+                             ProtectionVerdict::HIDDEN);
+                    return ProtectionResult(ProtectionVerdict::HIDDEN,
+                                            "Media hidden: others detected in room");
+                }
+                if (room_protection_.blur_media_on_trigger) {
+                    log_event("", "Degraded: room-aware protection triggered",
+                             ProtectionVerdict::DEGRADED);
+                    return ProtectionResult(ProtectionVerdict::DEGRADED,
+                                            "Media blurred: others detected in room");
+                }
+            }
+        }
+
         return ProtectionResult(ProtectionVerdict::ALLOWED, "Screen environment safe");
     }
 
@@ -813,7 +834,8 @@ public:
         // Check if viewer has download permission
         for (const auto& entry : asset.access_list) {
             if (entry.viewer_id == viewer_id && entry.is_permitted(current_time_ms)) {
-                if (entry.can_download && attempt == CopyAttempt::RIGHT_CLICK_SAVE) {
+                if (entry.can_download &&
+                    (attempt == CopyAttempt::RIGHT_CLICK_SAVE || attempt == CopyAttempt::DRAG_DROP)) {
                     return ProtectionResult(ProtectionVerdict::ALLOWED,
                                             "Download permitted for this viewer");
                 }
@@ -844,6 +866,15 @@ public:
                      ProtectionVerdict::BLOCKED_COPY);
             ProtectionResult result(ProtectionVerdict::BLOCKED_COPY,
                                     "Access blocked: developer tools detected");
+            result.copy_attempt = attempt;
+            return result;
+        }
+
+        if (copy_policy_.block_network_sniff && attempt == CopyAttempt::NETWORK_SNIFF) {
+            log_event(asset.asset_id, "Blocked: network stream sniffing attempt",
+                     ProtectionVerdict::BLOCKED_COPY);
+            ProtectionResult result(ProtectionVerdict::BLOCKED_COPY,
+                                    "Access blocked: network stream capture detected");
             result.copy_attempt = attempt;
             return result;
         }
@@ -885,7 +916,8 @@ public:
         uint16_t hop_count,
         const ScreenEnvironment& screen_env,
         const std::vector<std::string>& running_processes,
-        CopyAttempt copy_attempt
+        CopyAttempt copy_attempt,
+        uint8_t detected_faces = 0
     ) {
         if (!active_) {
             return ProtectionResult(ProtectionVerdict::ALLOWED, "Protection inactive");
@@ -929,7 +961,7 @@ public:
         // Screen safety (ENHANCED and above)
         if (asset.protection_level >= ProtectionLevel::ENHANCED) {
             ProtectionResult screen_result = check_screen_safety(
-                screen_env, running_processes);
+                screen_env, running_processes, detected_faces);
             if (!screen_result.is_safe()) {
                 return screen_result;
             }
