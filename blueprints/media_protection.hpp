@@ -243,11 +243,22 @@ struct EncryptedMediaPacket {
     {}
 
     bool is_valid() const {
-        return !media_id.empty() &&
-               iv.size() == 12 &&
-               !encrypted_data.empty() &&
-               auth_tag.size() == 16 &&
-               timestamp_ms > 0;
+        if (media_id.empty() || encrypted_data.empty() || timestamp_ms == 0) {
+            return false;
+        }
+
+        // Validate IV and auth tag sizes based on cipher
+        switch (cipher) {
+            case EncryptionStandard::AES_128_GCM:
+            case EncryptionStandard::AES_256_GCM:
+                return iv.size() == 12 && auth_tag.size() == 16;
+            case EncryptionStandard::CHACHA20:
+                return iv.size() == 12 && auth_tag.size() == 16; // ChaCha20-Poly1305
+            case EncryptionStandard::AES_256_CBC:
+                return iv.size() == 16; // CBC uses 16-byte IV, no separate auth tag
+            default:
+                return false;
+        }
     }
 };
 
@@ -486,10 +497,11 @@ struct ScreenCaptureDetector {
         if (!enabled) return false;
 
         for (const auto& proc : running_processes) {
-            // Convert to lowercase for comparison
+            // Convert to lowercase for comparison (cast to unsigned char to avoid UB)
             std::string lower_proc = proc;
             std::transform(lower_proc.begin(), lower_proc.end(),
-                          lower_proc.begin(), ::tolower);
+                          lower_proc.begin(),
+                          [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
 
             for (const auto& known : known_capture_processes) {
                 if (lower_proc.find(known) != std::string::npos) {
@@ -883,7 +895,7 @@ public:
         if (asset.protection_level == ProtectionLevel::LOCKDOWN) {
             if (viewer_id != asset.owner_id) {
                 log_event(asset.asset_id, "Blocked: asset in lockdown mode",
-                         ProtectionVerdict::HIDDEN);
+                         ProtectionVerdict::HIDDEN, current_time_ms);
                 return ProtectionResult(ProtectionVerdict::HIDDEN,
                                         "Media in lockdown: owner-only access");
             }
@@ -902,7 +914,7 @@ public:
 
         if (!viewer_authorized) {
             log_event(asset.asset_id, "Blocked: viewer not authorized",
-                     ProtectionVerdict::HIDDEN);
+                     ProtectionVerdict::HIDDEN, current_time_ms);
             return ProtectionResult(ProtectionVerdict::HIDDEN,
                                     "Access denied: viewer not in access list");
         }
@@ -931,7 +943,7 @@ public:
         }
 
         log_event(asset.asset_id, "Access granted: all checks passed",
-                 ProtectionVerdict::ALLOWED);
+                 ProtectionVerdict::ALLOWED, current_time_ms);
         return ProtectionResult(ProtectionVerdict::ALLOWED,
                                 "All protection checks passed — safe to display");
     }
@@ -939,7 +951,7 @@ public:
     // --- View Token Validation ---
 
     ProtectionResult validate_view_token(
-        const ViewToken& token,
+        ViewToken& token,
         uint64_t current_time_ms,
         const std::string& request_ip,
         const std::string& request_device
@@ -954,9 +966,14 @@ public:
 
         if (!token.is_valid(current_time_ms, request_ip, request_device)) {
             log_event(token.media_id, "Blocked: invalid or expired view token",
-                     ProtectionVerdict::HIDDEN);
+                     ProtectionVerdict::HIDDEN, current_time_ms);
             return ProtectionResult(ProtectionVerdict::HIDDEN,
                                     "Access denied: view token invalid, expired, or bound to different device");
+        }
+
+        // Enforce single-use: mark token as consumed by expiring it immediately
+        if (token.single_use) {
+            token.expires_at_ms = 0;  // invalidate for future use
         }
 
         return ProtectionResult(ProtectionVerdict::ALLOWED, "View token valid");
@@ -981,8 +998,8 @@ public:
 
 private:
     void log_event(const std::string& media_id, const std::string& desc,
-                   ProtectionVerdict v) {
-        protection_log_.push_back(ProtectionLogEntry(media_id, desc, v, 0));
+                   ProtectionVerdict v, uint64_t timestamp_ms = 0) {
+        protection_log_.push_back(ProtectionLogEntry(media_id, desc, v, timestamp_ms));
     }
 
     NetworkMediaPolicy      network_policy_;
