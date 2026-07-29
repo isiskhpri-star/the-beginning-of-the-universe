@@ -1,11 +1,11 @@
 # Meta-protection manifest — regenerate with: ./scripts/protection-guard.sh seal
 # format: <sha256|ENCRYPTED>  <path>
 626eb70465d47395b052779bebd356ddce481814b1a2878a7c31b682c918695f  .gitattributes
-a5ce7af63f1a2f2742933733ffb87442744331403ae2a06680565e232ec52e21  SECURITY.md
+6d95fee2c6933f8df9c1fadce2c4aadbf45c70109bb9855b44a4e1301515a3a5  SECURITY.md
 6b693c1fe27934a76828085329ae1164c8c83cc5561cdb1b7c2fee3f371c0be2  scripts/setup-git-crypt.sh
 887374b9033e5170fede3f547537d2219cb30ce79bb7e0e7e6994bb8441a28fa  protection/protected-paths.txt
 11b1534cdb14f955b813978c9688f45141acae834e7a9501d46c8ccaa1dfd599  scripts/protection-guard.sh
-ab61954ea48e902ca237b58972261882d4f4bdb9406df81b9c96474b4e0b7f97  .github/workflows/protection-guard.yml
+f372c4b6af5c2b11f02b8a557b7e5e7f189f0310e2b8127a1c12ef28da2ad517  .github/workflows/protection-guard.yml
 7341c8c33c42ab626a2ad9c93fd14b56bb6bb79456c69c255f270fe61e5b7e35  .github/CODEOWNERS
 1d5b2dcb5c2bfa2d8465f2752f76b12f6d0829a7256dd9c011d5f894b412841d  src/protection/IntegrityGuard.kt
 b45a6fc3eeb0611f9899e74d165ca00863df7e8c322d7dfb001606b4e519e9e7  src/transaction/TransactionGuard.kt

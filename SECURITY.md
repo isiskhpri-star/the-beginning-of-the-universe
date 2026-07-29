@@ -136,8 +136,8 @@ that the file is a real git-crypt blob, so verification also works on machines
 
 ### 2. CI enforcement
 
-`.github/workflows/protection-guard.yml` runs `verify` on every push and pull
-request, and adds a job-summary note listing any protected files the PR
+`.github/workflows/protection-guard.yml` runs `verify` on pushes to `main` and on
+pull requests, and adds a job-summary note listing any protected files the PR
 touches. `.github/CODEOWNERS` routes those files to a security owner; enable
 **Require review from Code Owners** in branch protection for `main` so a
 weakened guard cannot merge unreviewed.

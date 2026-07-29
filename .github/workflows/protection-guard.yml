@@ -6,12 +6,17 @@ on:
   pull_request:
   workflow_dispatch:
 
+permissions:
+  contents: read
+
 jobs:
   verify-protected-files:
     name: Verify protected files
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          persist-credentials: false
 
       - name: Verify integrity manifest
         run: |
@@ -24,9 +29,9 @@ jobs:
           BASE_SHA: ${{ github.event.pull_request.base.sha }}
           HEAD_SHA: ${{ github.event.pull_request.head.sha }}
         run: |
-          git fetch --no-tags --depth=1 origin "$BASE_SHA" || true
-          changed="$(git diff --name-only "$BASE_SHA" "$HEAD_SHA" || true)"
-          protected="$(sed -e 's/#.*//' -e 's/[[:space:]]*$//' protection/protected-paths.txt | grep -v '^$')"
+          git fetch --no-tags --depth=1 origin "$BASE_SHA" "$HEAD_SHA"
+          changed="$(git diff --name-only "$BASE_SHA" "$HEAD_SHA")"
+          protected="$(awk '{ sub(/#.*/, ""); sub(/[ \t]+$/, ""); if (length) print }' protection/protected-paths.txt)"
           hits="$(comm -12 <(echo "$changed" | sort -u) <(echo "$protected" | sort -u))"
           if [ -n "$hits" ]; then
             {
@@ -35,6 +40,6 @@ jobs:
               echo "These files are part of the repository's protection layer and require"
               echo "a security owner review (see .github/CODEOWNERS):"
               echo
-              echo "$hits" | sed 's/^/- `/; s/$/`/'
+              echo "$hits" | awk '{ printf "- `%s`\n", $0 }'
             } >>"$GITHUB_STEP_SUMMARY"
           fi
