@@ -1,0 +1,22 @@
+# Ownership of the repository's protection layer.
+# Changes to these paths require review from a security owner.
+# Enable "Require review from Code Owners" in branch protection for main.
+
+# Meta-protection: the guard, its manifest, and its CI enforcement
+/protection/                        @isiskhpri-star
+/scripts/protection-guard.sh        @isiskhpri-star
+/.github/workflows/protection-guard.yml @isiskhpri-star
+/.github/CODEOWNERS                 @isiskhpri-star
+/src/protection/                    @isiskhpri-star
+
+# Encryption and secrecy controls
+/.gitattributes                     @isiskhpri-star
+/SECURITY.md                        @isiskhpri-star
+/scripts/setup-git-crypt.sh         @isiskhpri-star
+/chest/                             @isiskhpri-star
+
+# Network protection blueprints
+/blueprints/                        @isiskhpri-star
+
+# Runtime safety controls
+/src/transaction/                   @isiskhpri-star

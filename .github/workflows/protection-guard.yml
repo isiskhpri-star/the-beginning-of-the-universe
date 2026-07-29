@@ -1,0 +1,40 @@
+name: Protection Guard
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  verify-protected-files:
+    name: Verify protected files
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Verify integrity manifest
+        run: |
+          chmod +x scripts/protection-guard.sh
+          ./scripts/protection-guard.sh verify
+
+      - name: Report protected files touched by this PR
+        if: github.event_name == 'pull_request'
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          git fetch --no-tags --depth=1 origin "$BASE_SHA" || true
+          changed="$(git diff --name-only "$BASE_SHA" "$HEAD_SHA" || true)"
+          protected="$(sed -e 's/#.*//' -e 's/[[:space:]]*$//' protection/protected-paths.txt | grep -v '^$')"
+          hits="$(comm -12 <(echo "$changed" | sort -u) <(echo "$protected" | sort -u))"
+          if [ -n "$hits" ]; then
+            {
+              echo "### Protected files changed"
+              echo
+              echo "These files are part of the repository's protection layer and require"
+              echo "a security owner review (see .github/CODEOWNERS):"
+              echo
+              echo "$hits" | sed 's/^/- `/; s/$/`/'
+            } >>"$GITHUB_STEP_SUMMARY"
+          fi

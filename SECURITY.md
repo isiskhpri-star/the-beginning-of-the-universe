@@ -110,3 +110,53 @@ After editing `.gitattributes`, commit and push. New files matching the patterns
 | Files appear as binary garbage | Run `git-crypt unlock` or the setup script with `--unlock` |
 | "No matching GPG key" on unlock | Your GPG key hasn't been authorized — ask the repo owner to run `git-crypt add-gpg-user` |
 | Changes to `.gitattributes` not taking effect | Commit the `.gitattributes` changes, then run `git-crypt status` to verify |
+
+## Meta-Protection: Guarding the Guards
+
+The encryption rules above only help if nobody quietly weakens them. The
+meta-protection layer protects the protection code itself, in three parts.
+
+### 1. Sealed manifest
+
+`protection/protected-paths.txt` lists every file that forms the protection
+layer — the encryption rules, the security docs, the setup and guard scripts,
+the runtime safety controls, the network blueprints, and the meta-protection
+files themselves. `protection/manifest.sha256` pins each one:
+
+```bash
+./scripts/protection-guard.sh verify   # fail if any protected file changed
+./scripts/protection-guard.sh seal     # re-pin after an intentional change
+./scripts/protection-guard.sh status   # report without failing
+```
+
+Encrypted paths are verified structurally rather than by plaintext hash: the
+guard asserts the git-crypt filter is still applied in `.gitattributes` and
+that the file is a real git-crypt blob, so verification also works on machines
+(and CI runners) without the decryption key.
+
+### 2. CI enforcement
+
+`.github/workflows/protection-guard.yml` runs `verify` on every push and pull
+request, and adds a job-summary note listing any protected files the PR
+touches. `.github/CODEOWNERS` routes those files to a security owner; enable
+**Require review from Code Owners** in branch protection for `main` so a
+weakened guard cannot merge unreviewed.
+
+### 3. Runtime self-check
+
+`src/protection/IntegrityGuard.kt` re-verifies the manifest at startup and
+refuses to run tampered code:
+
+```kotlin
+fun main() {
+    IntegrityGuard(File(".")).enforce()  // throws IntegrityViolation on tampering
+    // ... start the application
+}
+```
+
+### Changing a protected file
+
+1. Make the change.
+2. Run `./scripts/protection-guard.sh seal`.
+3. Commit the code **and** the manifest diff — the manifest diff is the audit
+   trail a security owner reviews.
