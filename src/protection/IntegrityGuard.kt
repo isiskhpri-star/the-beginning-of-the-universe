@@ -55,16 +55,24 @@ class IntegrityGuard(
         }
     }
 
-    /** Raised when protected code has been altered or removed. */
-    class IntegrityViolation(report: Report) : SecurityException(report.describe())
+    /** Raised when protected code has been altered, removed, or left unsealed. */
+    class IntegrityViolation(message: String) : SecurityException(message) {
+        constructor(report: Report) : this(report.describe())
+    }
 
     /**
-     * Verifies every entry in the manifest and returns a [Report] without
-     * throwing. Use [enforce] to halt the application on violations.
+     * Verifies every entry in the manifest and returns a [Report] describing
+     * each file. Tampering is reported rather than thrown — use [enforce] to
+     * halt the application. A missing manifest is itself an
+     * [IntegrityViolation] and is thrown.
      */
     fun verify(): Report {
         val manifest = File(repoRoot, manifestPath)
-        require(manifest.isFile) { "missing integrity manifest: $manifestPath" }
+        if (!manifest.isFile) {
+            throw IntegrityViolation(
+                "missing integrity manifest: $manifestPath — seal it with ./scripts/protection-guard.sh seal",
+            )
+        }
 
         val findings = manifest.readLines()
             .map { it.trim() }
