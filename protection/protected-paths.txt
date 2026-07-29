@@ -1,0 +1,28 @@
+# Meta-protection: the set of files that protect this repository.
+# One path per line. Blank lines and '#' comments are ignored.
+# Paths inside git-crypt-encrypted directories are verified structurally
+# (encryption still enforced) rather than by plaintext hash, so the guard
+# also works in CI runners that have no decryption key.
+
+# --- Encryption / secrecy controls ---
+.gitattributes
+SECURITY.md
+scripts/setup-git-crypt.sh
+
+# --- Meta-protection itself (the guard guards the guard) ---
+protection/protected-paths.txt
+scripts/protection-guard.sh
+.github/workflows/protection-guard.yml
+.github/CODEOWNERS
+src/protection/IntegrityGuard.kt
+
+# --- Runtime safety controls ---
+src/transaction/TransactionGuard.kt
+src/transaction/TransactionValidator.kt
+src/transaction/AccountAuthorization.kt
+src/transaction/RateLimiter.kt
+src/transaction/AuditLogger.kt
+
+# --- Network protection blueprints (git-crypt encrypted) ---
+blueprints/firewall.hpp
+blueprints/wifi_bluetooth_connectivity.hpp
