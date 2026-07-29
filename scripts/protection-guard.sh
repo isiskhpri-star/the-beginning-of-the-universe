@@ -80,6 +80,8 @@ verify() {
       echo "ORPHAN    $path (in manifest but no longer protected)"; failures=$((failures + 1)); continue
     fi
 
+    # A file sealed as ENCRYPTED, or one that git-crypt now covers, must keep
+    # its filter rule; its contents are only hashed when a key has decrypted it.
     if [ "$expected" = "ENCRYPTED" ] || is_encrypted_path "$path"; then
       if ! is_encrypted_path "$path"; then
         echo "UNGUARDED $path (git-crypt filter removed from .gitattributes)"
@@ -88,14 +90,9 @@ verify() {
       if is_gitcrypt_blob "$REPO_ROOT/$path"; then
         echo "OK        $path (encrypted at rest)"; continue
       fi
-      if [ "$expected" != "ENCRYPTED" ]; then
-        actual="$(sha256 "$REPO_ROOT/$path")"
-        [ "$actual" = "$expected" ] && { echo "OK        $path (decrypted, hash matches)"; continue; }
-        echo "TAMPERED  $path"; echo "          expected $expected"; echo "          actual   $actual"
-        failures=$((failures + 1)); continue
+      if [ "$expected" = "ENCRYPTED" ]; then
+        echo "OK        $path (decrypted locally, not hashed)"; continue
       fi
-      echo "OK        $path (decrypted locally, not hashed)"
-      continue
     fi
 
     actual="$(sha256 "$REPO_ROOT/$path")"
@@ -114,14 +111,14 @@ verify() {
     echo "protection-guard: FAILED — $failures of $checked protected files did not verify."
     echo "If the change is intentional, run './scripts/protection-guard.sh seal' and have a"
     echo "security owner review the manifest diff."
-    exit 1
+    return 1
   fi
   echo "protection-guard: OK — $checked protected files verified."
 }
 
 case "${1:-verify}" in
   seal)   seal ;;
-  verify) verify ;;
+  verify) verify || exit 1 ;;
   status) verify || true ;;
   *)      die "unknown command '${1}'; use seal|verify|status" ;;
 esac
