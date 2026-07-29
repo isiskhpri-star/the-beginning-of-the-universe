@@ -18,7 +18,9 @@ set -euo pipefail
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 PATHS_FILE="$REPO_ROOT/protection/protected-paths.txt"
 MANIFEST="$REPO_ROOT/protection/manifest.sha256"
-GITCRYPT_MAGIC=$'\x00GITCRYPT'
+# git-crypt blob header, hex-encoded: bash cannot hold the leading NUL byte
+# in a variable, so blobs are identified by hex dump rather than string compare.
+GITCRYPT_MAGIC_HEX="004749544352595054"
 
 die() { echo "protection-guard: $*" >&2; exit 1; }
 
@@ -38,7 +40,7 @@ is_encrypted_path() {
 }
 
 is_gitcrypt_blob() {
-  [ "$(head -c 9 "$1" 2>/dev/null || true)" = "$GITCRYPT_MAGIC" ]
+  [ "$(head -c 9 "$1" 2>/dev/null | od -An -tx1 | tr -d ' \n')" = "$GITCRYPT_MAGIC_HEX" ]
 }
 
 seal() {
