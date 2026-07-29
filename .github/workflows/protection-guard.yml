@@ -31,7 +31,7 @@ jobs:
         run: |
           git fetch --no-tags --depth=1 origin "$BASE_SHA"
           changed="$(git diff --name-only "$BASE_SHA" "$HEAD_SHA")"
-          protected="$(awk '{ sub(/#.*/, ""); gsub(/[ \t]+/, ""); if (length) print }' protection/protected-paths.txt)"
+          protected="$(awk '{ sub(/#.*/, ""); sub(/[ \t]+$/, ""); if (length) print }' protection/protected-paths.txt)"
           hits="$(comm -12 <(echo "$changed" | sort -u) <(echo "$protected" | sort -u))"
           if [ -n "$hits" ]; then
             {
