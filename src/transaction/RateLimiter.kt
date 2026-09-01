@@ -5,6 +5,7 @@ import transaction.models.SafetyCheck
 import transaction.models.Transaction
 import java.time.Duration
 import java.time.Instant
+import java.util.Collections
 import java.util.concurrent.ConcurrentHashMap
 
 /**
@@ -41,6 +42,9 @@ class RateLimiter(
     private val userHistory: ConcurrentHashMap<String, MutableList<TransactionRecord>> =
         ConcurrentHashMap()
 
+    private fun newSynchronizedList(): MutableList<TransactionRecord> =
+        Collections.synchronizedList(mutableListOf())
+
     /**
      * Evaluates rate-limit checks for the given transaction.
      *
@@ -68,11 +72,11 @@ class RateLimiter(
         )
 
         accountHistory
-            .getOrPut(transaction.accountId) { mutableListOf() }
+            .computeIfAbsent(transaction.accountId) { newSynchronizedList() }
             .add(record)
 
         userHistory
-            .getOrPut(transaction.initiatorUserId) { mutableListOf() }
+            .computeIfAbsent(transaction.initiatorUserId) { newSynchronizedList() }
             .add(record)
     }
 
@@ -169,10 +173,10 @@ class RateLimiter(
     fun purgeStaleRecords() {
         val cutoff = Instant.now().minus(Duration.ofHours(24))
         accountHistory.values.forEach { records ->
-            records.removeAll { it.timestamp.isBefore(cutoff) }
+            synchronized(records) { records.removeAll { it.timestamp.isBefore(cutoff) } }
         }
         userHistory.values.forEach { records ->
-            records.removeAll { it.timestamp.isBefore(cutoff) }
+            synchronized(records) { records.removeAll { it.timestamp.isBefore(cutoff) } }
         }
     }
 }
